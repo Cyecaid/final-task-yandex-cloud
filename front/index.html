@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serverless Guestbook</title>
+    <style>
+        :root {
+            --primary-main: #61DADB;
+            --secondary-main: #FCE4E4;
+            --error-main: #f44336;
+            --success-main: #4caf50;
+            --warning-main: #ff9800;
+            
+            --bg-dark: #edffff;
+            --gray-stroke: #eff1f3;
+            --bad-fg: #7D1212;
+            --bad-bg: #FCE4E4;
+            --btn-primary: #4CCBCC;
+
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-color);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid var(--primary-main);
+            display: inline-block;
+            padding-bottom: 5px;
+        }
+        
+        #system-info {
+            background: #ffffff;
+            border: 1px solid var(--gray-stroke);
+            padding: 15px;
+            margin-bottom: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            font-size: 0.9em;
+        }
+
+        #system-info p { margin: 5px 0; }
+        #system-info strong { color: var(--btn-primary); }
+        
+        .input-group {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        input[type="text"] {
+            padding: 12px;
+            border: 2px solid var(--gray-stroke);
+            border-radius: 6px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--primary-main);
+        }
+
+        #user-input { flex: 1; min-width: 150px; }
+        #msg-input { flex: 3; min-width: 200px; }
+
+        button {
+            background-color: var(--btn-primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1rem;
+            transition: background 0.3s, transform 0.1s;
+        }
+
+        button:hover {
+            background-color: var(--primary-main);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+        
+        #messages { margin-top: 30px; }
+
+        .card {
+            background: white;
+            border: 1px solid var(--gray-stroke);
+            padding: 15px 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            position: relative;
+            border-left: 4px solid var(--primary-main);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: var(--btn-primary);
+        }
+
+        .meta {
+            font-size: 0.75em;
+            color: #999;
+            font-weight: normal;
+        }
+
+        .card-content {
+            color: #444;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+<h1>Гостевая книга</h1>
+
+<div id="system-info">
+    <p><strong>Версия фронтенда:</strong> <span id="front-ver">1.0.0</span></p>
+    <p><strong>Версия бэкенда:</strong> <span id="back-ver">Загрузка...</span></p>
+    <p><strong>Реплика бэкенда (ID):</strong> <span id="back-replica">Загрузка...</span></p>
+</div>
+
+<div class="input-group">
+    <input type="text" id="user-input" placeholder="Ваше имя" maxlength="50">
+    <input type="text" id="msg-input" placeholder="Сообщение..." maxlength="500">
+    <button onclick="sendMessage()">Отправить</button>
+</div>
+
+<div id="messages"></div>
+
+<script>
+    const FRONT_VERSION = "1.1.0";
+    document.getElementById('front-ver').innerText = FRONT_VERSION;
+
+    async function loadInfo() {
+        try {
+            const res = await fetch('/api/info');
+            if (!res.ok) throw new Error('Network error');
+            const data = await res.json();
+            document.getElementById('back-ver').innerText = data.version;
+            document.getElementById('back-replica').innerText = data.replicaId;
+        } catch (e) {
+            console.error(e);
+            document.getElementById('back-ver').innerText = "Ошибка";
+        }
+    }
+
+    async function loadMessages() {
+        try {
+            const res = await fetch('/api/messages');
+            const msgs = await res.json();
+            const container = document.getElementById('messages');
+            container.innerHTML = '';
+            msgs.forEach(m => {
+                const div = document.createElement('div');
+                div.className = 'card';
+                
+                const userSafe = m.user ? escapeHtml(m.user) : 'Аноним';
+                const contentSafe = escapeHtml(m.content);
+                const dateSafe = new Date(m.createdAt).toLocaleString();
+
+                div.innerHTML = `
+                        <div class="card-header">
+                            <span>${userSafe}</span>
+                            <span class="meta">${dateSafe}</span>
+                        </div>
+                        <div class="card-content">${contentSafe}</div>
+                    `;
+                container.appendChild(div);
+            });
+        } catch(e) {
+            console.error("Ошибка загрузки сообщений", e);
+        }
+    }
+
+    async function sendMessage() {
+        const userInput = document.getElementById('user-input');
+        const msgInput = document.getElementById('msg-input');
+
+        const userText = userInput.value.trim();
+        const msgText = msgInput.value.trim();
+
+        if(!msgText || !userText) {
+            alert("Пожалуйста, заполните имя и сообщение");
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/messages', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ user: userText, content: msgText })
+            });
+
+            if(res.ok) {
+                msgInput.value = '';
+                loadInfo();
+                loadMessages();
+            } else {
+                alert("Ошибка при отправке");
+            }
+        } catch(e) {
+            console.error(e);
+        }
+    }
+
+    function escapeHtml(text) {
+        if (!text) return text;
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    loadInfo();
+    loadMessages();
+</script>
+</body>
+</html>

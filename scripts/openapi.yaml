@@ -1,0 +1,39 @@
+openapi: 3.0.0
+info:
+  title: Guestbook API
+  version: 1.0.0
+paths:
+  /api/{proxy+}:
+    x-yc-apigateway-any-method:
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: ${CONTAINER_ID}
+        service_account_id: ${SERVICE_ACCOUNT_ID}
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          schema:
+            type: string
+
+  /:
+    get:
+      x-yc-apigateway-integration:
+        type: object_storage
+        bucket: ${BUCKET_NAME}
+        object: index.html
+        service_account_id: ${SERVICE_ACCOUNT_ID}
+
+  /{file+}:
+    get:
+      x-yc-apigateway-integration:
+        type: object_storage
+        bucket: ${BUCKET_NAME}
+        object: '{file}'
+        service_account_id: ${SERVICE_ACCOUNT_ID}
+      parameters:
+        - name: file
+          in: path
+          required: true
+          schema:
+            type: string
